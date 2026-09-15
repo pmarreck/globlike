@@ -1,0 +1,15 @@
+# Dirtree: Stateful directory trees in the CLI for humans and LLMs. https://github.com/pmarreck/dirtree
+ver=1.2
+annotate=[
+	INTENT.md = Shared pattern-library purpose and accepted language direction
+	PLAN.md = Parser milestone and remaining matcher integration tasks
+	README.md = Scanner API, current framing rule, and build commands
+	build = Optimized library build entry point
+	build.zig = Zig module, static library, and complete test step
+	build.zig.zon = Zig package identity and source manifest
+	flake.lock = Exact Nix dependency revisions
+	flake.nix = Pinned Zig toolchain, ReleaseSafe tests, and ReleaseFast build
+	src/lib.zig = Pure stack-based scanner for glob text and inline regex boundaries
+	test = Complete test suite entry point
+	tests/unit/parser.zig = Delimiter edge cases, allocation failures, nesting, and source preservation
+]

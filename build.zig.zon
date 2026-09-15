@@ -1,0 +1,7 @@
+.{
+    .name = .globlike,
+    .fingerprint = 0x646d5657cb84a711,
+    .version = "0.1.0",
+    .minimum_zig_version = "0.16.0",
+    .paths = .{ "build.zig", "build.zig.zon", "src", "tests" },
+}
