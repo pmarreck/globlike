@@ -16,8 +16,10 @@ unsupported compiled constructs before applications accept saved patterns.
 Resource and input failures remain errors, never ordinary nonmatches.
 
 Build the parser from failing edge-case tests. Delimiter discovery uses a
-small stack. Whether excerpt framing requires balanced unescaped brackets
-independently of PCRE2's literal/comment rules is awaiting Peter's decision.
+small stack. Peter confirmed on September 15, 2026 at 21:41 EDT that unescaped
+brackets must balance independently of PCRE2's literal/comment rules. Literal
+brackets require backslash escaping in both glob text and inline excerpts.
+Full `regex:` mode bypasses excerpt framing and retains PCRE2 syntax.
 
 Success means shared classifier tests over candidate sets, precise malformed
 pattern diagnostics, allocation-failure cleanup, and adoption in both callers.

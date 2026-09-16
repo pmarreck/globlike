@@ -36,9 +36,9 @@ O(segment count) output storage. It uses no recursion or filesystem operations.
 This framing rule is independent of PCRE2's lexical rules. Inside excerpts,
 use `[\]]` rather than `[]]` for a regex class matching `]`, and `[\[]`
 rather than `[[]` for one matching `[`. Quotes and regex comments do not hide
-brackets from the framing layer. Whether to add PCRE2-aware framing instead is
-an open design question; this first milestone does not claim that support.
-Full `regex:` mode will bypass glob excerpt framing entirely.
+brackets from the framing layer. This stricter framing rule was confirmed by
+Peter on September 15, 2026. Full `regex:` mode will bypass glob excerpt
+framing entirely.
 
 ## Development
 
