@@ -23,4 +23,5 @@ Full `regex:` mode bypasses excerpt framing and retains PCRE2 syntax.
 
 Success means shared classifier tests over candidate sets, precise malformed
 pattern diagnostics, allocation-failure cleanup, and adoption in both callers.
-Keep this repository local until publication is requested.
+Peter authorized MIT publication, a README, and RotShield adoption on September
+15, 2026. A thin filesystem matching CLI may follow the library integration.

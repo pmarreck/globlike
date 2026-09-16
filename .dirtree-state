@@ -2,6 +2,7 @@
 ver=1.2
 annotate=[
 	INTENT.md = Shared pattern-library purpose and accepted language direction
+	PCRE2-LICENSE.md = Required upstream PCRE2 license and notices
 	PLAN.md = Parser milestone and remaining matcher integration tasks
 	README.md = Scanner API, current framing rule, and build commands
 	build = Optimized library build entry point
@@ -10,6 +11,8 @@ annotate=[
 	flake.lock = Exact Nix dependency revisions
 	flake.nix = Pinned Zig toolchain, ReleaseSafe tests, and ReleaseFast build
 	src/lib.zig = Pure stack-based scanner for glob text and inline regex boundaries
+	src/translate.zig = Translate portable glob operators and scoped regex excerpts with source offsets
 	test = Complete test suite entry point
+	tests/unit/matching.zig = Set classifiers and structured PCRE2 diagnostic regressions
 	tests/unit/parser.zig = Delimiter edge cases, allocation failures, nesting, and source preservation
 ]
