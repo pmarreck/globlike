@@ -4,6 +4,10 @@ A portable Zig pattern library for paths, with inline PCRE2 expressions and
 structured diagnostics. PCRE2 is a pinned transitive dependency; applications
 import the `globlike` module. RotShield and dirtree adoption is in progress.
 
+The [accepted next language direction](INTENT.md) uses `%r` regex sigils and
+standard glob character classes, with quoted regex-like CLI arguments. That
+migration is not implemented yet; the syntax below describes the current code.
+
 [![Mechatron Prime CI](https://img.shields.io/endpoint?url=https%3A%2F%2Fthelio-nixos.tail66c90.ts.net%2Fbadges%2Fgloblike.json&style=for-the-badge)](https://thelio-nixos.tail66c90.ts.net/mechatron-prime/)
 
 The agreed language has three glob operators (`*`, `?`, `**`), `[regex]`
