@@ -16,18 +16,17 @@ No caller needs to configure Bash with `set -f`. The library receives strings
 directly and has no shell dependency. Avoid changing pattern syntax merely to
 evade shell processing; choose delimiters for readable regex instead.
 
-The marker decision does not settle the exact delimiter set, nesting and
-escape rules, flags, compatibility migration, or filesystem adapter design.
-Specify those before replacing the current grammar. Consolidation with `glob`
-remains a direction under discussion, not a completed repository merger.
+The version 0.2 language specifies framing and migration below. Consolidation
+with `glob` remains a direction under discussion, not a completed repository
+merger. Filesystem adapter design remains separate work.
 
-## Implemented baseline
+## Implemented language
 
-The September 15 implementation has `*`, `?`, and `**` as its only glob
-operators, bracket-delimited inline regex excerpts, and backslash escaping of
-literal glob-text brackets. It has not yet migrated to the accepted `%r`
-direction. Bare patterns use glob mode; `glob:` and `regex:` select the mode
-explicitly. Forward slashes are portable pattern separators.
+Version 0.2 provides `*`, `?`, `**`, ordinary glob character classes, and
+`%r[...]`, `%r{...}`, `%r(...)`, and `%r<...>` regex excerpts. Bare patterns use
+glob mode; `glob:` and `regex:` select the mode explicitly. Forward slashes are
+portable pattern separators. Existing `[regex]` excerpts must be migrated to
+`%r[regex]`; there is no ambiguous legacy auto-detection.
 
 The library is pure in-memory work. Applications own filesystem traversal,
 basename matching policy, settings persistence, and presentation. PCRE2 owns
@@ -35,12 +34,13 @@ regex compilation and DFA matching. Its fork's compatibility query must reject
 unsupported compiled constructs before applications accept saved patterns.
 Resource and input failures remain errors, never ordinary nonmatches.
 
-Build parser changes from failing edge-case tests. The baseline delimiter
-scanner uses a small stack and follows the September 15 decision that unescaped
-brackets balance independently of PCRE2's literal/comment rules. Literal
-brackets require backslash escaping in both glob text and inline excerpts.
-Full `regex:` mode bypasses excerpt framing and retains PCRE2 syntax. This
-historical rule is not a settled framing rule for the future sigil grammar.
+Build parser changes from failing edge-case tests. The iterative excerpt
+scanner balances the selected delimiter pair lexically, including occurrences
+inside regex classes and comments. Backslash shields the next byte from
+framing and remains in the regex body. Choose another delimiter when needed.
+Flags use regex inline options, not sigil suffixes. Full `regex:` mode bypasses
+excerpt framing and retains PCRE2 syntax. See README.md for bracket edge cases
+and the migration guide.
 
 Success means shared classifier tests over candidate sets, precise malformed
 pattern diagnostics, allocation-failure cleanup, and adoption in both callers.

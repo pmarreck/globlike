@@ -28,10 +28,11 @@ test "literal punctuation and escaped brackets cannot inject regex operators" {
 }
 
 test "inline regex fragments preserve grouping and independent case scope" {
-    try classify("[Users|home]/[\\p{L}+]/**", .{}, &.{ "Users/Peter/a", "home/Élodie/b/c", "home/123/a", "Users/PeterX", "HOME/Peter/a" }, &.{ true, true, false, false, false });
-    try classify("A[bc]D", .{ .case_insensitive = true }, &.{ "AbcD", "abcd", "ABCD", "AbD", "AcD", "xbcdy" }, &.{ true, true, false, false, false, false });
-    try classify("A[(?i)bc]D", .{}, &.{ "AbcD", "ABCD", "abcd", "Abcd" }, &.{ true, true, false, false });
-    try classify("[[a-z]]", .{}, &.{ "a", "z", "A", "ab", "[a-z]" }, &.{ true, true, false, false, false });
+    try classify("%r[Users|home]/%r{\\p{L}+}/**", .{}, &.{ "Users/Alex/a", "home/Élodie/b/c", "home/123/a", "Users/AlexX", "HOME/Alex/a" }, &.{ true, true, false, false, false });
+    try classify("A%r[bc]D", .{ .case_insensitive = true }, &.{ "AbcD", "abcd", "ABCD", "AbD", "AcD", "xbcdy" }, &.{ true, true, false, false, false, false });
+    try classify("A%r[(?i)bc]D", .{}, &.{ "AbcD", "ABCD", "abcd", "Abcd" }, &.{ true, true, false, false });
+    try classify("%r[[a-z]]", .{}, &.{ "a", "z", "A", "ab", "[a-z]" }, &.{ true, true, false, false, false });
+    try classify("A[b-c]D", .{ .case_insensitive = true }, &.{ "AbD", "AcD", "abd", "ACD", "AbcD" }, &.{ true, true, true, true, false });
 }
 
 test "explicit modes preserve regex syntax and case overrides" {
@@ -58,14 +59,14 @@ test "regex compile errors preserve source offset, category, code and wording" {
     try t.expect(result.diagnostic.engine_code > 0);
     var buffer: [256]u8 = undefined;
     try t.expect(std.mem.indexOf(u8, result.diagnostic.message(&buffer), "missing closing parenthesis") != null);
-    const delimiter = try g.compile(t.allocator, "glob:a]", .{});
+    const delimiter = try g.compile(t.allocator, "glob:a%r[", .{});
     try t.expect(delimiter == .diagnostic);
-    try t.expectEqual(.unexpected_close, delimiter.diagnostic.kind);
+    try t.expectEqual(.unclosed_excerpt, delimiter.diagnostic.kind);
     try t.expectEqual(@as(?usize, 6), delimiter.diagnostic.offset);
 }
 
 test "DFA incompatibility is rejected before any subjects are matched" {
-    for ([_][]const u8{ "regex:hidden/(a)\\1", "regex:(?R)", "regex:(?<=a{1,3})b", "[hidden/(a)\\1]" }) |source| {
+    for ([_][]const u8{ "regex:hidden/(a)\\1", "regex:(?R)", "regex:(?<=a{1,3})b", "%r[hidden/(a)\\1]" }) |source| {
         const result = try g.compile(t.allocator, source, .{});
         try t.expect(result == .diagnostic);
         try t.expectEqual(.dfa_unsupported, result.diagnostic.kind);
@@ -96,7 +97,7 @@ test "bounded match resources produce typed diagnostics" {
 }
 
 test "inline regex must be valid independently and cannot escape its scope" {
-    for ([_][]const u8{ "[a)|(?:b]", "prefix[)|(?i:.*]suffix" }) |source| {
+    for ([_][]const u8{ "%r[a)|(?:b]", "prefix%r[)|(?i:.*]suffix" }) |source| {
         var result = try g.compile(t.allocator, source, .{});
         defer if (result == .pattern) result.pattern.deinit();
         try t.expect(result == .diagnostic);
@@ -110,9 +111,10 @@ fn allocationCase(allocator: std.mem.Allocator, source: []const u8) !void {
 }
 
 test "compilation releases owned buffers on every Zig allocation failure" {
-    try t.checkAllAllocationFailures(t.allocator, allocationCase, .{"a[\\p{L}+]/**/b?"});
+    try t.checkAllAllocationFailures(t.allocator, allocationCase, .{"a%r{\\p{L}+}/[a-c]/**/b?"});
     try t.checkAllAllocationFailures(t.allocator, allocationCase, .{"regex:("});
-    try t.checkAllAllocationFailures(t.allocator, allocationCase, .{"[(a)\\1]"});
+    try t.checkAllAllocationFailures(t.allocator, allocationCase, .{"%r[(a)\\1]"});
+    try t.checkAllAllocationFailures(t.allocator, allocationCase, .{"[[:digit:]"});
 }
 
 test "pattern sets agree with individual classifiers and preserve error context" {
@@ -142,7 +144,7 @@ fn setAllocations(allocator: std.mem.Allocator) !void {
     var set = g.PatternSet.init(allocator);
     defer set.deinit();
     _ = try set.add("a*", .{});
-    _ = try set.add("[b|c]", .{});
+    _ = try set.add("%r[b|c]", .{});
     const result = set.matchesAny("b", null);
     if (result == .diagnostic and result.diagnostic.detail.kind == .out_of_memory) return error.OutOfMemory;
     _ = try set.add("d", .{});

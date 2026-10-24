@@ -17,7 +17,7 @@
 					zig = zig-overlay.packages.${system}."0.16.0";
 					zigDeps = pkgs.stdenv.mkDerivation {
 						pname = "globlike-zig-deps";
-						version = "0.1.0";
+						version = "0.2.0";
 						src = self;
 						nativeBuildInputs = [ zig pkgs.git pkgs.cacert ];
 						outputHashMode = "recursive";
@@ -38,7 +38,7 @@
 					};
 				in pkgs.stdenv.mkDerivation {
 					pname = "globlike";
-					version = "0.1.0";
+					version = "0.2.0";
 					src = self;
 					strictDeps = true;
 					nativeBuildInputs = [ zig-overlay.packages.${system}."0.16.0" ];

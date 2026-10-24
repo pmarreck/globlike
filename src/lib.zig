@@ -1,4 +1,5 @@
 const std = @import("std");
+const syntax = @import("syntax.zig");
 const c = @cImport({
     @cDefine("PCRE2_CODE_UNIT_WIDTH", "8");
     @cDefine("PCRE2_STATIC", "");
@@ -9,7 +10,7 @@ pub const Kind = enum { glob, regex };
 /// Half-open byte offsets into the caller's source; regex markers are excluded.
 pub const Segment = struct { kind: Kind, start: usize, end: usize };
 pub const Diagnostic = struct {
-    kind: enum(u32) { unexpected_close = 1, unclosed_excerpt, dangling_escape, regex_syntax, dfa_unsupported, match_failed, out_of_memory, workspace_limit, invalid_subject, unclosed_regex_delimiter, invalid_regex_flag },
+    kind: enum(u32) { unexpected_close = 1, unclosed_excerpt, dangling_escape, regex_syntax, dfa_unsupported, match_failed, out_of_memory, workspace_limit, invalid_subject, unclosed_regex_delimiter, invalid_regex_flag, unsupported_glob_class },
     offset: ?usize = null,
     engine_code: i32 = 0,
 
@@ -30,6 +31,7 @@ pub const Diagnostic = struct {
             .invalid_subject => "subject is not valid UTF-8",
             .unclosed_regex_delimiter => "slash-delimited regex has no closing slash",
             .invalid_regex_flag => "unknown regex flag; supported flags are i, m, s, x, U, u",
+            .unsupported_glob_class => "locale collating and equivalence classes are not supported; use a character or code-point range",
         };
     }
 };
@@ -236,40 +238,56 @@ pub const Result = union(enum) {
     }
 };
 
-/// Frame excerpts by balancing unescaped brackets. This does not validate regex.
-/// Escape sequences stay byte-for-byte intact in both kinds of source span.
+/// Split glob text from %r sigils by balancing the selected delimiter pair.
+/// Framing is lexical, not PCRE2 parsing; escape bytes remain untouched.
+/// Complexity: O(n) time and auxiliary storage, with no recursive calls.
 pub fn parse(allocator: std.mem.Allocator, source: []const u8) std.mem.Allocator.Error!Result {
     var output: std.ArrayList(Segment) = .empty;
     defer output.deinit(allocator);
-    var openings: std.ArrayList(usize) = .empty;
-    defer openings.deinit(allocator);
+    const classes = try syntax.Classes.init(allocator, source);
+    defer classes.deinit();
     var glob_start: usize = 0;
     var i: usize = 0;
     while (i < source.len) {
-        switch (source[i]) {
-            '\\' => {
-                if (i + 1 == source.len) return .{ .diagnostic = .{ .kind = .dangling_escape, .offset = i } };
-                i += 2;
+        if (source[i] == '\\') {
+            if (i + 1 == source.len) return .{ .diagnostic = .{ .kind = .dangling_escape, .offset = i } };
+            i += 2;
+            continue;
+        }
+        if (source[i] == '[') {
+            if (classes.end(i)) |end| {
+                i = end;
                 continue;
-            },
-            '[' => {
-                if (openings.items.len == 0 and glob_start < i)
-                    try output.append(allocator, .{ .kind = .glob, .start = glob_start, .end = i });
-                try openings.append(allocator, i);
-            },
-            ']' => {
-                const start = openings.pop() orelse return .{ .diagnostic = .{ .kind = .unexpected_close, .offset = i } };
-                if (openings.items.len == 0) {
-                    try output.append(allocator, .{ .kind = .regex, .start = start + 1, .end = i });
-                    glob_start = i + 1;
+            }
+        }
+        if (source[i] == '%' and i + 2 < source.len and source[i + 1] == 'r') {
+            if (syntax.closingDelimiter(source[i + 2])) |close| {
+                const marker = i;
+                const open = source[i + 2];
+                if (glob_start < i) try output.append(allocator, .{ .kind = .glob, .start = glob_start, .end = i });
+                const body = i + 3;
+                i = body;
+                var depth: usize = 1;
+                while (i < source.len) : (i += 1) {
+                    if (source[i] == '\\') {
+                        if (i + 1 == source.len) return .{ .diagnostic = .{ .kind = .dangling_escape, .offset = i } };
+                        i += 1;
+                    } else if (source[i] == open) {
+                        depth += 1;
+                    } else if (source[i] == close) {
+                        depth -= 1;
+                        if (depth == 0) break;
+                    }
                 }
-            },
-            else => {},
+                if (depth != 0) return .{ .diagnostic = .{ .kind = .unclosed_excerpt, .offset = marker } };
+                try output.append(allocator, .{ .kind = .regex, .start = body, .end = i });
+                i += 1;
+                glob_start = i;
+                continue;
+            }
         }
         i += 1;
     }
-    if (openings.items.len != 0)
-        return .{ .diagnostic = .{ .kind = .unclosed_excerpt, .offset = openings.items[0] } };
     if (glob_start < source.len)
         try output.append(allocator, .{ .kind = .glob, .start = glob_start, .end = source.len });
     return .{ .segments = try output.toOwnedSlice(allocator) };
