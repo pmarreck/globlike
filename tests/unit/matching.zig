@@ -22,8 +22,44 @@ test "glob operators classify complete candidate sets with directory boundaries"
     try classify("?", .{}, &.{ "a", "é", "日", "/", "ab", "", "\n", "\\" }, &.{ true, true, true, false, false, false, true, true });
 }
 
+test "extended globs classify alternatives and cardinalities" {
+    const images = &.{ "image.JPG", "image.png", "image.gif", "dir/image.png", "image.JPG.png" };
+    try classify("@(*.JPG|*.png)", .{}, images, &.{ true, true, false, false, true });
+    try classify("file?(1|2).txt", .{}, &.{ "file.txt", "file1.txt", "file2.txt", "file12.txt", "file3.txt" }, &.{ true, true, true, false, false });
+    try classify("file+(ab|c).txt", .{}, &.{ "fileab.txt", "filec.txt", "fileabc.txt", "file.txt", "filea.txt" }, &.{ true, true, true, false, false });
+    try classify("file*(ab|c).txt", .{}, &.{ "file.txt", "fileab.txt", "filecc.txt", "fileac.txt" }, &.{ true, true, true, false });
+}
+
+test "extended globs nest and preserve slash boundaries" {
+    try classify("@(a|+(b|c)).txt", .{}, &.{ "a.txt", "b.txt", "bc.txt", "cc.txt", "d.txt", "dir/a.txt" }, &.{ true, true, true, true, false, false });
+    try classify("!(foo|bar).txt", .{}, &.{ "foo.txt", "bar.txt", "baz.txt", "foo.log", "dir/baz.txt" }, &.{ false, false, true, false, false });
+    try classify("dir/!(tmp|cache)", .{}, &.{ "dir/src", "dir/tmp", "dir/cache", "src", "dir/a/b" }, &.{ true, false, false, false, false });
+    try classify("@(%r{[0-9]{2}}|draft).txt", .{}, &.{ "12.txt", "draft.txt", "1.txt", "123.txt", "other.txt" }, &.{ true, true, false, false, false });
+}
+
+test "unclosed extended glob reports its operator offset" {
+    const result = try g.compile(t.allocator, "prefix/@(a|b", .{});
+    try t.expect(result == .diagnostic);
+    try t.expectEqual(.unclosed_extglob, result.diagnostic.kind);
+    try t.expectEqual(@as(?usize, 7), result.diagnostic.offset);
+}
+
+test "extended glob translation has a typed nesting limit" {
+    const depth = 258;
+    var source: [depth * 3 + 1]u8 = undefined;
+    for (0..depth) |i| {
+        source[i * 2] = '@';
+        source[i * 2 + 1] = '(';
+    }
+    source[depth * 2] = 'a';
+    @memset(source[depth * 2 + 1 ..], ')');
+    const result = try g.compile(t.allocator, &source, .{});
+    try t.expect(result == .diagnostic);
+    try t.expectEqual(.extglob_nesting_limit, result.diagnostic.kind);
+}
+
 test "literal punctuation and escaped brackets cannot inject regex operators" {
-    try classify("a+(b|c){2}.txt", .{}, &.{ "a+(b|c){2}.txt", "abb.txt", "acc.txt", "a+(b|c){2}Xtxt" }, &.{ true, false, false, false });
+    try classify("a\\+(b|c){2}.txt", .{}, &.{ "a+(b|c){2}.txt", "abb.txt", "acc.txt", "a+(b|c){2}Xtxt" }, &.{ true, false, false, false });
     try classify("file\\[draft\\]\\*.txt", .{}, &.{ "file[draft]*.txt", "filed*.txt", "file[draft]a.txt", "file[draft]*.txt\n" }, &.{ true, false, false, false });
 }
 
@@ -112,6 +148,7 @@ fn allocationCase(allocator: std.mem.Allocator, source: []const u8) !void {
 
 test "compilation releases owned buffers on every Zig allocation failure" {
     try t.checkAllAllocationFailures(t.allocator, allocationCase, .{"a%r{\\p{L}+}/[a-c]/**/b?"});
+    try t.checkAllAllocationFailures(t.allocator, allocationCase, .{"@(%r{[0-9]{2}}|+(draft|final)).txt"});
     try t.checkAllAllocationFailures(t.allocator, allocationCase, .{"regex:("});
     try t.checkAllAllocationFailures(t.allocator, allocationCase, .{"%r[(a)\\1]"});
     try t.checkAllAllocationFailures(t.allocator, allocationCase, .{"[[:digit:]"});

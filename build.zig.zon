@@ -1,7 +1,7 @@
 .{
     .name = .globlike,
     .fingerprint = 0x646d5657cb84a711,
-    .version = "0.2.0",
+    .version = "0.3.0",
     .minimum_zig_version = "0.16.0",
     .dependencies = .{ .pcre2 = .{
         .url = "git+https://github.com/pmarreck/pcre2#f10b7befa4780f9fd235fe9c754917bb5d9619b7",

@@ -7,9 +7,10 @@ import the `globlike` module. RotShield and dirtree adoption is in progress.
 [![Mechatron Prime CI](https://img.shields.io/endpoint?url=https%3A%2F%2Fthelio-nixos.tail66c90.ts.net%2Fbadges%2Fgloblike.json&style=for-the-badge)](https://thelio-nixos.tail66c90.ts.net/mechatron-prime/)
 
 The language combines glob operators (`*`, `?`, `**`), ordinary glob character
-classes, and `%r` regex excerpts. Bare patterns and `glob:` use glob mode;
-`regex:` selects a PCRE2 DFA regex. Version 0.2.0 changes bracket semantics;
-see the migration examples below before upgrading saved patterns.
+classes, Bash-style extended globs, and `%r` regex excerpts. Bare patterns and
+`glob:` use glob mode; `regex:` selects a PCRE2 DFA regex. Version 0.2.0 changed
+bracket semantics; version 0.3.0 adds extended globs. See the migration examples
+below before upgrading saved patterns.
 
 ## Matching
 
@@ -18,8 +19,14 @@ other than slash, and `**` also crosses slashes. `**/` matches zero or more
 complete directory components. Glob patterns match the entire subject,
 including its true end if it contains a newline. `/` is the separator on every
 platform; callers normalize Windows paths before matching. A backslash escapes
-the next character in glob text. Braces and Bash extended globs are not
-expanded; punctuation is literal except for glob classes and `%r` markers.
+the next character in glob text. Braces are not expanded.
+
+Extended globs use `?(a|b)` for zero or one alternative, `*(a|b)` for zero or
+more, `+(a|b)` for one or more, `@(a|b)` for exactly one, and `!(a|b)` for a
+path component that is not an alternative. They can nest, and alternatives can
+contain `%r` excerpts. As with `*` and `?`, their glob portions do not consume
+`/`. Escape the operator when the operator-parenthesis pair is literal, as in
+`a\+(b|c)`. An unclosed group reports `unclosed_extglob` at the operator byte.
 
 `[abc]` matches one character from that set. Classes also support ranges such
 as `[a-z]`, negation with `[!abc]` or `[^abc]`, POSIX named classes such as
@@ -147,8 +154,11 @@ saving them. This library update does not rewrite any application's settings.
 Applications exposing these patterns through a shell CLI should document
 single-quoted arguments, such as `'**/photo-%r{[0-9]{4}}.jpg'`. The library
 has no shell dependency and requires no `set -f` configuration. Quoting is
-shell syntax, not part of the pattern string passed to `compile`. The existing
-sibling `glob` command is not yet a consumer of this library.
+shell syntax, not part of the pattern string passed to `compile`. Peter selected
+this library as the sibling [`glob`](https://github.com/pmarreck/glob) command's
+sole pattern engine on October 28, 2026. That repository owns filesystem
+traversal, brace expansion, command execution, and presentation; it consumes
+`globlike` as a pinned dependency.
 
 ## Development
 
@@ -169,7 +179,7 @@ This oracle test is skipped on other operating systems; portable classifier
 tests still run there.
 `nix build .#checks.x86_64-linux.cross` compiles the suite for Linux
 and Windows on x86_64/ARM64, plus macOS ARM64; compilation is not native execution.
-See [PLAN.md](PLAN.md) for application integration and the optional thin CLI.
+See [PLAN.md](PLAN.md) for application integration.
 
 ## License
 

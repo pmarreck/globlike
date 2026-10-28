@@ -10,7 +10,7 @@ pub const Kind = enum { glob, regex };
 /// Half-open byte offsets into the caller's source; regex markers are excluded.
 pub const Segment = struct { kind: Kind, start: usize, end: usize };
 pub const Diagnostic = struct {
-    kind: enum(u32) { unexpected_close = 1, unclosed_excerpt, dangling_escape, regex_syntax, dfa_unsupported, match_failed, out_of_memory, workspace_limit, invalid_subject, unclosed_regex_delimiter, invalid_regex_flag, unsupported_glob_class },
+    kind: enum(u32) { unexpected_close = 1, unclosed_excerpt, dangling_escape, regex_syntax, dfa_unsupported, match_failed, out_of_memory, workspace_limit, invalid_subject, unclosed_regex_delimiter, invalid_regex_flag, unsupported_glob_class, unclosed_extglob, extglob_nesting_limit },
     offset: ?usize = null,
     engine_code: i32 = 0,
 
@@ -32,6 +32,8 @@ pub const Diagnostic = struct {
             .unclosed_regex_delimiter => "slash-delimited regex has no closing slash",
             .invalid_regex_flag => "unknown regex flag; supported flags are i, m, s, x, U, u",
             .unsupported_glob_class => "locale collating and equivalence classes are not supported; use a character or code-point range",
+            .unclosed_extglob => "unclosed extended glob",
+            .extglob_nesting_limit => "extended glob nesting limit exceeded",
         };
     }
 };

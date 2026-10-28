@@ -72,10 +72,12 @@ regex without requiring users to configure `set -f`. Quoted regex-like CLI
 arguments were accepted in the October 20 direction and explicitly confirmed
 October 23. Do not reopen the quotation or marker choice as an unanswered ask.
 
-Braces and extended globs remain future language work. Keep regex quantifiers
-out of any future brace expansion. Preserve diagnostics as errors rather than
-ordinary nonmatches. Retain the pure in-memory matcher boundary; filesystem
-traversal and command execution belong to adapters.
+Peter decided on October 28 that the sibling `glob` command will consume
+`globlike` as a separately pinned dependency so there is only one maintained
+pattern engine. Version 0.3 therefore adds the command's characterized
+`?(...)`, `*(...)`, `+(...)`, `@(...)`, and `!(...)` grammar here. Filesystem
+traversal, brace expansion, command execution, and presentation remain in the
+`glob` adapter. No separate filesystem CLI belongs in this repository.
 
 ## CI reconciliation
 

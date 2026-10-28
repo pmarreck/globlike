@@ -65,6 +65,157 @@ pub const Translation = struct {
         }
         try self.emit(allocator, "]", end - 1);
     }
+
+    fn regexAt(segments: []const g.Segment, marker: usize) ?g.Segment {
+        const body = marker +| 3;
+        var low: usize = 0;
+        var high = segments.len;
+        while (low < high) {
+            const middle = low + (high - low) / 2;
+            if (segments[middle].start < body)
+                low = middle + 1
+            else
+                high = middle;
+        }
+        if (low < segments.len and segments[low].kind == .regex and segments[low].start == body) return segments[low];
+        return null;
+    }
+
+    fn extglobClose(source: []const u8, start: usize, end: usize, classes: syntax.Classes, segments: []const g.Segment) ?usize {
+        var depth: usize = 1;
+        var i = start + 2;
+        while (i < end) {
+            if (regexAt(segments, i)) |segment| {
+                i = segment.end + 1;
+                continue;
+            }
+            if (source[i] == '\\') {
+                i += 2;
+                continue;
+            }
+            if (source[i] == '[') {
+                if (classes.end(i)) |class_end| {
+                    i = class_end;
+                    continue;
+                }
+            }
+            if (i + 1 < end and std.mem.indexOfScalar(u8, "?*+@!", source[i]) != null and source[i + 1] == '(') {
+                depth += 1;
+                i += 2;
+                continue;
+            }
+            if (source[i] == ')') {
+                depth -= 1;
+                if (depth == 0) return i;
+            }
+            i += 1;
+        }
+        return null;
+    }
+
+    fn componentEnd(source: []const u8, start: usize, end: usize, classes: syntax.Classes, segments: []const g.Segment) usize {
+        var i = start;
+        while (i < end) {
+            if (regexAt(segments, i)) |segment| {
+                i = segment.end + 1;
+                continue;
+            }
+            if (source[i] == '\\') {
+                i += 2;
+                continue;
+            }
+            if (source[i] == '[') {
+                if (classes.end(i)) |class_end| {
+                    i = class_end;
+                    continue;
+                }
+            }
+            if (source[i] == '/') return i;
+            i += 1;
+        }
+        return end;
+    }
+
+    fn globRange(self: *Translation, allocator: std.mem.Allocator, source: []const u8, start: usize, end: usize, classes: syntax.Classes, segments: []const g.Segment, alternatives: bool, depth: usize) !void {
+        if (depth > 256) {
+            self.diagnostic = .{ .kind = .extglob_nesting_limit, .offset = start };
+            return;
+        }
+        var i = start;
+        while (i < end) {
+            if (regexAt(segments, i)) |segment| {
+                try self.emit(allocator, "(?-i:", segment.start);
+                for (source[segment.start..segment.end], segment.start..) |char, offset| try self.emit(allocator, &.{char}, offset);
+                try self.emit(allocator, ")", segment.end);
+                i = segment.end + 1;
+                continue;
+            }
+            if (i + 1 < end and std.mem.indexOfScalar(u8, "?*+@!", source[i]) != null and source[i + 1] == '(') {
+                const close = extglobClose(source, i, end, classes, segments) orelse {
+                    self.diagnostic = .{ .kind = .unclosed_extglob, .offset = i };
+                    return;
+                };
+                const operator = source[i];
+                if (operator == '!') {
+                    const suffix_end = componentEnd(source, close + 1, end, classes, segments);
+                    try self.emit(allocator, "(?!(?:", i);
+                    try self.globRange(allocator, source, i + 2, close, classes, segments, true, depth + 1);
+                    if (self.diagnostic != null) return;
+                    try self.emit(allocator, ")", close);
+                    try self.globRange(allocator, source, close + 1, suffix_end, classes, segments, false, depth + 1);
+                    if (self.diagnostic != null) return;
+                    try self.emit(allocator, "(?=/|\\z))[^/]*", i);
+                } else {
+                    try self.emit(allocator, "(?:", i);
+                    try self.globRange(allocator, source, i + 2, close, classes, segments, true, depth + 1);
+                    if (self.diagnostic != null) return;
+                    const quantifier: []const u8 = switch (operator) {
+                        '?' => "?",
+                        '*' => "*",
+                        '+' => "+",
+                        '@' => "",
+                        else => unreachable,
+                    };
+                    try self.emit(allocator, ")", close);
+                    try self.emit(allocator, quantifier, i);
+                }
+                i = close + 1;
+                continue;
+            }
+            switch (source[i]) {
+                '|' => if (alternatives) {
+                    try self.emit(allocator, "|", i);
+                } else try self.literal(allocator, '|', i),
+                '[' => {
+                    if (classes.end(i)) |class_end| {
+                        try self.characterClass(allocator, source, i, class_end);
+                        if (self.diagnostic != null) return;
+                        i = class_end;
+                        continue;
+                    }
+                    try self.literal(allocator, '[', i);
+                },
+                '\\' => {
+                    i += 1;
+                    try self.literal(allocator, source[i], i);
+                },
+                '*' => {
+                    if (i + 1 < end and source[i + 1] == '*') {
+                        if (i + 2 < end and source[i + 2] == '/') {
+                            try self.emit(allocator, "(?:[^/]+/)*", i);
+                            i += 2;
+                        } else {
+                            try self.emit(allocator, "(?s:.*)", i);
+                            i += 1;
+                        }
+                    } else try self.emit(allocator, "[^/]*", i);
+                },
+                '?' => try self.emit(allocator, "[^/]", i),
+                else => try self.literal(allocator, source[i], i),
+            }
+            i += 1;
+        }
+    }
 };
 
 pub fn translate(allocator: std.mem.Allocator, source: []const u8, raw_regex: bool) !Translation {
@@ -80,46 +231,8 @@ pub fn translate(allocator: std.mem.Allocator, source: []const u8, raw_regex: bo
     const classes = try syntax.Classes.init(allocator, source);
     defer classes.deinit();
     try output.emit(allocator, "\\A(?:", 0);
-    for (parsed.segments) |segment| {
-        if (segment.kind == .regex) {
-            try output.emit(allocator, "(?-i:", segment.start);
-            for (source[segment.start..segment.end], segment.start..) |char, i| try output.emit(allocator, &.{char}, i);
-            try output.emit(allocator, ")", segment.end);
-            continue;
-        }
-        var i = segment.start;
-        while (i < segment.end) {
-            switch (source[i]) {
-                '[' => {
-                    if (classes.end(i)) |end| {
-                        try output.characterClass(allocator, source, i, end);
-                        if (output.diagnostic != null) return output;
-                        i = end;
-                        continue;
-                    }
-                    try output.literal(allocator, '[', i);
-                },
-                '\\' => {
-                    i += 1;
-                    try output.literal(allocator, source[i], i);
-                },
-                '*' => {
-                    if (i + 1 < segment.end and source[i + 1] == '*') {
-                        if (i + 2 < segment.end and source[i + 2] == '/') {
-                            try output.emit(allocator, "(?:[^/]+/)*", i);
-                            i += 2;
-                        } else {
-                            try output.emit(allocator, "(?s:.*)", i);
-                            i += 1;
-                        }
-                    } else try output.emit(allocator, "[^/]*", i);
-                },
-                '?' => try output.emit(allocator, "[^/]", i),
-                else => try output.literal(allocator, source[i], i),
-            }
-            i += 1;
-        }
-    }
+    try output.globRange(allocator, source, 0, source.len, classes, parsed.segments, false, 0);
+    if (output.diagnostic != null) return output;
     try output.emit(allocator, ")\\z", source.len);
     return output;
 }
